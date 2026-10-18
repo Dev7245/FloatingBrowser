@@ -1,4 +1,12 @@
 {
   "name": "Android Dev",
-  "image": "mcr.microsoft.com/devcontainers/android:latest"
+  "image": "mcr.microsoft.com/devcontainers/universal:2",
+  "features": {
+    "ghcr.io/devcontainers-contrib/features/gradle-sdkman:2": {
+      "version": "latest",
+      "jdkVersion": "17",
+      "jdkDistro": "tem"
+    },
+    "ghcr.io/nordcominc/devcontainer-features/android-sdk:2": {}
+  }
 }   
