@@ -1,0 +1,4 @@
+{
+  "name": "Android Dev",
+  "image": "mcr.microsoft.com/devcontainers/android:latest"
+}   
