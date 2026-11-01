@@ -28,4 +28,4 @@ cat > app/src/main/res/layout/activity_main.xml << 'EOF'
         android:layout_marginTop="16dp"/>
 
 </LinearLayout>
-EOF   
+EOF
