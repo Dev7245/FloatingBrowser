@@ -14,85 +14,136 @@ import android.view.View
 import android.view.WindowManager
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import android.widget.Button
 import android.widget.EditText
 import android.widget.LinearLayout
 
 class FloatingBrowserService : Service() {
+
     private lateinit var windowManager: WindowManager
     private lateinit var container: LinearLayout
-    private lateinit var params: WindowManager.LayoutParams
+    private lateinit var webView: WebView
+    private var initialX = 0
+    private var initialY = 0
+    private var initialTouchX = 0f
+    private var initialTouchY = 0f
+
+    override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onCreate() {
         super.onCreate()
-        createNotificationChannel()
-        startForeground(1, buildNotification())
         windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
-        val webView = WebView(this).apply {
-            settings.javaScriptEnabled = true
-            settings.domStorageEnabled = true
-            webViewClient = WebViewClient()
-            loadUrl("https://www.google.com")
+    }
+
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        createNotificationChannel()
+        val notification: Notification = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            Notification.Builder(this, "floating_browser_channel")
+                .setContentTitle("Floating Browser ativo")
+                .setContentText("Toque para voltar ao app")
+                .setSmallIcon(android.R.drawable.ic_dialog_info)
+                .build()
+        } else {
+            Notification.Builder(this)
+                .setContentTitle("Floating Browser ativo")
+                .setSmallIcon(android.R.drawable.ic_dialog_info)
+                .build()
         }
-        val urlBar = EditText(this).apply {
-            hint = "Digite a URL..."
-            setOnEditorActionListener { _, _, _ ->
-                val url = text.toString()
-                webView.loadUrl(if (url.startsWith("http")) url else "https://$url")
-                clearFocus()
-                params.flags = params.flags or WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
-                windowManager.updateViewLayout(container, params)
-                true
-            }
+        startForeground(1, notification)
+
+        if (!::container.isInitialized) {
+            showFloatingWindow()
         }
-        container = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(16, 16, 16, 16)
-            setBackgroundColor(0xFF222222.toInt())
-            addView(urlBar, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
-            addView(webView, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
-        }
-        params = WindowManager.LayoutParams(
-            (resources.displayMetrics.widthPixels * 0.7f).toInt(),
-            (resources.displayMetrics.heightPixels * 0.6f).toInt(),
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY else WindowManager.LayoutParams.TYPE_SYSTEM_ALERT,
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
+        return START_STICKY
+    }
+
+    private fun showFloatingWindow() {
+        val params = WindowManager.LayoutParams(
+            800, 1200,
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
+                WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+            else
+                WindowManager.LayoutParams.TYPE_PHONE,
+            WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
+                    WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH,
             PixelFormat.TRANSLUCENT
         ).apply {
             gravity = Gravity.TOP or Gravity.START
-            x = 0
+            x = 100
             y = 100
         }
-        windowManager.addView(container, params)
-        setupDrag(container)
-    }
 
-    private fun setupDrag(view: View) {
-        var initialX = 0; var initialY = 0
-        var touchX = 0f; var touchY = 0f
-        view.setOnTouchListener { _, event ->
-            when (event.action) {
-                MotionEvent.ACTION_DOWN -> { initialX = params.x; initialY = params.y; touchX = event.rawX; touchY = event.rawY }
-                MotionEvent.ACTION_MOVE -> { params.x = initialX + (event.rawX - touchX).toInt(); params.y = initialY + (event.rawY - touchY).toInt(); windowManager.updateViewLayout(view, params) }
-            }
-            false
+        container = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setBackgroundColor(0xFF333333.toInt())
         }
+
+        val urlBar = EditText(this).apply {
+            hint = "Digite a URL"
+            setText("https://google.com")
+            setOnEditorActionListener { _, _, _ ->
+                var url = text.toString()
+                if (!url.startsWith("http")) url = "https://$url"
+                webView.loadUrl(url)
+                true
+            }
+        }
+
+        val closeBtn = Button(this).apply {
+            text = "X Fechar"
+            setOnClickListener { stopSelf() }
+        }
+
+        webView = WebView(this).apply {
+            webViewClient = WebViewClient()
+            settings.javaScriptEnabled = true
+            loadUrl("https://google.com")
+        }
+
+        container.addView(closeBtn, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 120))
+        container.addView(urlBar, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 120))
+        container.addView(webView, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.MATCH_PARENT))
+
+        container.setOnTouchListener(object : View.OnTouchListener {
+            override fun onTouch(v: View?, event: MotionEvent): Boolean {
+                when (event.action) {
+                    MotionEvent.ACTION_DOWN -> {
+                        initialX = params.x
+                        initialY = params.y
+                        initialTouchX = event.rawX
+                        initialTouchY = event.rawY
+                        return true
+                    }
+                    MotionEvent.ACTION_MOVE -> {
+                        params.x = initialX + (event.rawX - initialTouchX).toInt()
+                        params.y = initialY + (event.rawY - initialTouchY).toInt()
+                        windowManager.updateViewLayout(container, params)
+                        return true
+                    }
+                }
+                return false
+            }
+        })
+
+        windowManager.addView(container, params)
     }
 
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel("floating_browser", "Navegador Flutuante", NotificationManager.IMPORTANCE_LOW)
-            getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
+            val channel = NotificationChannel(
+                "floating_browser_channel",
+                "Floating Browser",
+                NotificationManager.IMPORTANCE_LOW
+            )
+            val manager = getSystemService(NotificationManager::class.java)
+            manager.createNotificationChannel(channel)
         }
-    }
-
-    private fun buildNotification(): Notification {
-        return Notification.Builder(this, "floating_browser").setContentTitle("Navegador Flutuante").setContentText("O navegador está ativo").build()
     }
 
     override fun onDestroy() {
         super.onDestroy()
-        try { windowManager.removeView(container) } catch (_: Exception) {}
+        if (::container.isInitialized) {
+            try { windowManager.removeView(container) } catch (e: Exception) {}
+        }
     }
-
-    override fun onBind(intent: Intent?): IBinder? = null
 }
