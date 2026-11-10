@@ -11,8 +11,8 @@ android {
         applicationId = "com.floating.browser"
         minSdk = 23
         targetSdk = 34
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 63
+        versionName = "1.0.63"
     }
 
     buildTypes {
