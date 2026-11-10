@@ -3,6 +3,7 @@ name: Build Debug APK
 on:
   push:
     branches: [ "main" ]
+  workflow_dispatch:
 
 jobs:
   build:
@@ -17,21 +18,32 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
+      - name: Ler versão
+        id: version
+        run: |
+          VER=$(grep -oP 'versionName = "\K[^"]+' app/build.gradle.kts || echo "1.0")
+          CODE=$(grep -oP 'versionCode = \K\d+' app/build.gradle.kts || echo "1")
+          echo "ver=$VER" >> $GITHUB_OUTPUT
+          echo "code=$CODE" >> $GITHUB_OUTPUT
+          echo "Versão: $VER Build: $CODE"
+
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
       - name: Build Debug APK
-        run: ./gradlew assembleDebug
+        run: ./gradlew assembleDebug --no-daemon
 
-      - name: Upload APK artifact
+      - name: Renomear APK com versão
+        run: |
+          APK=$(find app/build/outputs/apk/debug -name "*.apk" | head -n 1)
+          NOME="FloatingBrowser-v${{ steps.version.outputs.ver }}-b${{ steps.version.outputs.code }}.apk"
+          echo "Renomeando para $NOME"
+          cp "$APK" "$NOME"
+          echo "NOME=$NOME" >> $GITHUB_ENV
+
+      - name: Salvar APK versionado
         uses: actions/upload-artifact@v4
         with:
-          name: FloatingBrowser-APK
-          path: app/build/outputs/apk/debug/app-debug.apk
-
-      - name: Create Release
-        if: startsWith(github.ref, 'refs/tags/')
-        uses: softprops/action-gh-release@v2
-        with:
-          files: app/build/outputs/apk/debug/app-debug.apk
-          generate_release_notes: true
+          name: ${{ env.NOME }}
+          path: ${{ env.NOME }}
+          retention-days: 90
